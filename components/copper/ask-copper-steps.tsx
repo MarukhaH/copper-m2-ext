@@ -105,6 +105,27 @@ function inputRows(name: string, input: unknown): Row[] {
       ["Product", productName(data.product)],
       ["Color", data.color ? String(data.color) : "All colors"],
     ];
+  if (name === "recommend_plan")
+    return [
+      [
+        "Memory wanted",
+        data.memoryDays !== undefined ? `${data.memoryDays} days` : "Not said",
+      ],
+      [
+        "Notes hours a month",
+        data.notesHoursPerMonth !== undefined
+          ? String(data.notesHoursPerMonth)
+          : "Not said",
+      ],
+      [
+        "Refined answers",
+        data.wantsRefinedAnswers === undefined
+          ? "Not said"
+          : data.wantsRefinedAnswers
+            ? "Yes"
+            : "No",
+      ],
+    ];
   return [];
 }
 
@@ -254,6 +275,22 @@ function Output({ step }: { step: ToolStep }) {
       </div>
     );
   }
+
+  if (step.name === "recommend_plan")
+    return (
+      <div className="flex flex-col gap-1 text-sm">
+        <p className="text-primary text-lg font-bold">{String(out.planName)}</p>
+        {(out.reasons as string[] | undefined)?.map((reason) => (
+          <p key={reason}>{reason}</p>
+        ))}
+        {Number(out.annualSavingsUsd) > 0 && (
+          <p className="font-semibold">
+            Paying annually saves {formatUsd2(Number(out.annualSavingsUsd))} a
+            year.
+          </p>
+        )}
+      </div>
+    );
 
   return <p className="text-sm">{JSON.stringify(step.output)}</p>;
 }

@@ -1,4 +1,4 @@
-// Module 2: the four tools Ask Copper can use. Products and prices come from
+// Module 2: the five tools Ask Copper can use. Products and prices come from
 // lib/copper/catalog.ts and stock from lib/copper/inventory.ts, so the
 // chatbot never has to make them up.
 // The contract for each tool is in specs/module-2/spec.md.
@@ -56,6 +56,20 @@ export type Availability =
     }
   | { status: "not_a_color"; product: string; color: string; colors: string[] }
   | { status: "unavailable"; message: string };
+
+export type RecommendPlanInput = {
+  memoryDays?: number;
+  notesHoursPerMonth?: number;
+  wantsRefinedAnswers?: boolean;
+};
+
+export type PlanRecommendation = {
+  plan: Plan["id"];
+  planName: string;
+  reasons: string[];
+  /** What annual billing saves over 12 monthly payments, when Plus is the pick. */
+  annualSavingsUsd: number;
+};
 
 const PRODUCT_IDS = ["copper-home", "copper-notes"] as const;
 
@@ -191,6 +205,53 @@ export async function checkAvailability(
   return { status: "ok", product: product.name, colors };
 }
 
+export const recommendPlanInput: z.ZodType<RecommendPlanInput> = z.object({
+  memoryDays: z.number().int().min(0).max(3650).optional(),
+  notesHoursPerMonth: z.number().min(0).max(1000).optional(),
+  wantsRefinedAnswers: z.boolean().optional(),
+});
+
+/**
+ * recommend_plan: Free or Copper Plus, whichever covers what the customer
+ * needs. Every limit comes from the catalog, so it follows price and plan
+ * changes. It only recommends Plus when Free falls short, so it stays honest.
+ */
+export function recommendPlan(input: RecommendPlanInput): PlanRecommendation {
+  const plans = getPlans();
+  const free = plans.find((p) => p.id === "free")!;
+  const plus = plans.find((p) => p.id === "copper-plus")!;
+  const freeHours = Number(free.notesHoursPerMonth);
+
+  const reasons: string[] = [];
+  if (input.memoryDays !== undefined && input.memoryDays > free.memoryDays)
+    reasons.push(
+      `Free remembers for ${free.memoryDays} days, but you want ${input.memoryDays}. Copper Plus remembers for ${plus.memoryDays} days.`,
+    );
+  if (
+    input.notesHoursPerMonth !== undefined &&
+    Number.isFinite(freeHours) &&
+    input.notesHoursPerMonth > freeHours
+  )
+    reasons.push(
+      `Free covers ${freeHours} hours of Copper Notes a month, but you expect ${input.notesHoursPerMonth}. Copper Plus is ${plus.notesHoursPerMonth.toLowerCase()}.`,
+    );
+  if (input.wantsRefinedAnswers && !free.refinedAnswers && plus.refinedAnswers)
+    reasons.push("Refined answers are only on Copper Plus.");
+
+  const needsPlus = reasons.length > 0;
+  const chosen = needsPlus ? plus : free;
+  return {
+    plan: chosen.id,
+    planName: chosen.name,
+    reasons: needsPlus
+      ? reasons
+      : ["Free covers everything you described, so there's no need to pay."],
+    annualSavingsUsd: needsPlus
+      ? cents(plus.monthlyUsd * 12 - plus.annualUsd)
+      : 0,
+  };
+}
+
 export const copperTools = {
   get_products: tool({
     description:
@@ -215,5 +276,11 @@ export const copperTools = {
       "Checks today's stock for a Copper product, for every color or one color, including restock dates.",
     inputSchema: checkAvailabilityInput,
     execute: async (input) => checkAvailability(input),
+  }),
+  recommend_plan: tool({
+    description:
+      "Recommends the Free plan or Copper Plus from what a customer needs: how many days Copper should remember, how many hours a month they'll record with Copper Notes, and whether they want refined answers. Says whether annual billing saves money.",
+    inputSchema: recommendPlanInput,
+    execute: async (input) => recommendPlan(input),
   }),
 };
