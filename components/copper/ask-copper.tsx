@@ -24,6 +24,7 @@ const STARTERS = [
   "How much is Copper Home with Copper Plus, paid yearly, for 2 years?",
   "Is Copper Notes in Night Sky in stock?",
   "Is Copper Plus cheaper monthly or yearly?",
+  "I'm a student who records about 25 hours of lectures a month and wants Copper to remember things for a few months. Which plan should I get?",
 ];
 
 type Turn = { question: string; progress: Progress | null };
