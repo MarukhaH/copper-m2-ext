@@ -16,6 +16,7 @@ import {
   type Progress,
   type ToolStep,
 } from "@/lib/copper/assistant/progress";
+import type { BudgetResult } from "@/lib/copper/assistant/tools";
 import { cn } from "@/lib/utils";
 
 type Tone = "copper" | "teal" | "sunset";
@@ -105,27 +106,8 @@ function inputRows(name: string, input: unknown): Row[] {
       ["Product", productName(data.product)],
       ["Color", data.color ? String(data.color) : "All colors"],
     ];
-  if (name === "recommend_plan")
-    return [
-      [
-        "Memory wanted",
-        data.memoryDays !== undefined ? `${data.memoryDays} days` : "Not said",
-      ],
-      [
-        "Notes hours a month",
-        data.notesHoursPerMonth !== undefined
-          ? String(data.notesHoursPerMonth)
-          : "Not said",
-      ],
-      [
-        "Refined answers",
-        data.wantsRefinedAnswers === undefined
-          ? "Not said"
-          : data.wantsRefinedAnswers
-            ? "Yes"
-            : "No",
-      ],
-    ];
+  if (name === "find_products_by_budget")
+    return [["Budget", formatUsd2(Number(data.budgetUsd))]];
   return [];
 }
 
@@ -276,21 +258,44 @@ function Output({ step }: { step: ToolStep }) {
     );
   }
 
-  if (step.name === "recommend_plan")
+  if (step.name === "find_products_by_budget") {
+    const budget = out as unknown as BudgetResult;
     return (
-      <div className="flex flex-col gap-1 text-sm">
-        <p className="text-primary text-lg font-bold">{String(out.planName)}</p>
-        {(out.reasons as string[] | undefined)?.map((reason) => (
-          <p key={reason}>{reason}</p>
-        ))}
-        {Number(out.annualSavingsUsd) > 0 && (
-          <p className="font-semibold">
-            Paying annually saves {formatUsd2(Number(out.annualSavingsUsd))} a
-            year.
-          </p>
+      <div className="flex flex-col gap-2 text-sm">
+        {budget.affordable?.length === 0 && (
+          <p>Nothing fits {formatUsd2(budget.budgetUsd)}.</p>
         )}
+        {budget.affordable?.map((product) => (
+          <div key={product.id} className="flex flex-col gap-1">
+            <div className="flex justify-between gap-4 font-semibold">
+              <span>{product.name}</span>
+              <span>{formatUsd2(product.priceUsd)}</span>
+            </div>
+            {product.colors === null && <p>Stock can&apos;t be checked.</p>}
+            {product.colors?.map((row) => (
+              <div key={row.color} className="flex justify-between gap-4">
+                <span>{row.color}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-semibold",
+                    STOCK_PILL[row.stock].className,
+                  )}
+                >
+                  {STOCK_PILL[row.stock].text}
+                  {row.restockDate && ` until ${dateLabel(row.restockDate)}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+        {budget.overBudget?.map((product) => (
+          <p key={product.id} className="text-muted-foreground">
+            {product.name} is {formatUsd2(product.overByUsd)} over budget.
+          </p>
+        ))}
       </div>
     );
+  }
 
   return <p className="text-sm">{JSON.stringify(step.output)}</p>;
 }
